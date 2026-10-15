@@ -1,0 +1,395 @@
+Sending Messages
+Getting Started
+Send Your First Message
+
+Copy page
+
+Send your first SMS in five minutes using the Telnyx Messaging API, including authentication, picking a sender, and posting a message to the /messages endpoint.
+
+Send your first SMS using the Telnyx Messaging API. This guide takes you from zero to sending a message in about 5 minutes by testing between two Telnyx numbers—no carrier registration required.
+​
+Prerequisites
+A Telnyx account (free to create)
+​
+1. Get two phone numbers
+Purchase two Telnyx numbers so you can test messaging between them without registration requirements.
+1
+Go to Numbers
+
+Navigate to Numbers > Search & Buy in the portal.
+2
+Search for numbers
+
+Enter your preferred area code or region, check SMS under features, and click Search.
+3
+Purchase two numbers
+
+Click Add to Cart on two numbers, then Place Order.
+Having two numbers lets you test on-net (Telnyx-to-Telnyx) messaging immediately, and also test receiving inbound messages.
+​
+2. Create a Messaging Profile
+1
+Go to Messaging
+
+Navigate to Messaging in the portal.
+2
+Create a profile
+
+Click Add new profile, give it a name (e.g., “My App”), and click Save.
+3
+Assign both numbers
+
+Go to My Numbers, and for each number, click the Messaging Profile dropdown, select your profile, and save.
+​
+3. Get your API key
+Go to API Keys and copy your API key (or create one if needed).
+​
+4. Send a message
+SMS
+MMS
+
+curl
+
+Node
+
+Python
+
+Ruby
+
+Go
+
+Java
+
+.NET
+
+PHP
+curl -X POST https://api.telnyx.com/v2/messages \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "from": "+15551234567",
+    "to": "+15559876543",
+    "text": "Hello, world!"
+  }'
+Replace the placeholder values:
+YOUR_API_KEY: Your API key from step 3
+from: Your first Telnyx number (the sender)
+to: Your second Telnyx number (the recipient)
+E.164 format is required. Always include the + prefix, country code, and full number with no spaces or punctuation.
+International number format examples
+
+Sending to non-Telnyx numbers? Off-net messaging to external carriers typically requires sender registration (10DLC, toll-free verification, etc.). See Next steps for registration guides.
+​
+Response
+A successful response looks like this:
+{
+  "data": {
+    "record_type": "message",
+    "direction": "outbound",
+    "id": "b0c7e8cb-6227-4c74-9f32-c7f80c30934b",
+    "type": "SMS",
+    "messaging_profile_id": "16fd2706-8baf-433b-82eb-8c7fada847da",
+    "from": {
+      "phone_number": "+15551234567",
+      "carrier": "Telnyx",
+      "line_type": "Wireless"
+    },
+    "to": [
+      {
+        "phone_number": "+15559876543",
+        "status": "queued",
+        "carrier": "CARRIER",
+        "line_type": "Wireless"
+      }
+    ],
+    "text": "Hello, world!",
+    "encoding": "GSM-7",
+    "parts": 1,
+    "cost": {
+      "amount": 0.0051,
+      "currency": "USD"
+    }
+  }
+}
+The status: "queued" means your message is on its way. Save the id to track delivery status.
+​
+Error handling
+API errors return structured JSON responses with an error code, title, and detail message. Handle these in your application to provide clear feedback and enable automatic recovery.
+​
+Error response format
+{
+  "errors": [
+    {
+      "code": "40300",
+      "title": "Forbidden",
+      "detail": "The from number +15551234567 is not assigned to a messaging profile.",
+      "meta": {
+        "url": "https://developers.telnyx.com/docs/messaging/messages/error-codes"
+      }
+    }
+  ]
+}
+​
+SDK error handling examples
+
+Node
+
+Python
+
+Ruby
+
+Go
+
+Java
+
+.NET
+
+PHP
+import Telnyx from 'telnyx';
+
+const client = new Telnyx({
+  apiKey: process.env['TELNYX_API_KEY'],
+});
+
+try {
+  const response = await client.messages.send({
+    from: '+15551234567',
+    to: '+15559876543',
+    text: 'Hello, world!'
+  });
+  console.log('Message sent:', response.data.id);
+} catch (error) {
+  switch (error.status) {
+    case 400:
+      console.error('Bad request:', error.message);
+      // Malformed JSON, missing required fields
+      break;
+    case 401:
+      console.error('Authentication failed. Check your API key.');
+      break;
+    case 403:
+      console.error('Forbidden:', error.message);
+      // Number not assigned to profile, or registration required
+      break;
+    case 422:
+      console.error('Validation error:', error.message);
+      // Invalid phone number format, text too long, etc.
+      break;
+    case 429:
+      // Rate limited — extract retry-after header
+      const retryAfter = error.headers?.['retry-after'] || 1;
+      console.warn(`Rate limited. Retrying after ${retryAfter}s...`);
+      await new Promise(r => setTimeout(r, retryAfter * 1000));
+      // Retry the request
+      break;
+    default:
+      console.error(`Error (${error.status}):`, error.message);
+  }
+}
+​
+HTTP error codes
+HTTP Status	Meaning	Retryable	Action
+400	Bad Request	No	Fix the request body — malformed JSON or missing required fields
+401	Unauthorized	No	Check your API key is correct and active
+402	Payment Required	No	Add funds to your account balance
+403	Forbidden	No	Number not assigned to a messaging profile, or sender registration required
+404	Not Found	No	The resource (message ID, profile ID) does not exist
+422	Unprocessable Entity	No	Validation failed — see error detail for the specific field
+429	Too Many Requests	Yes	Rate limited — wait for the retry-after header value, then retry
+500	Internal Server Error	Yes	Telnyx server error — retry with exponential backoff
+503	Service Unavailable	Yes	Temporary outage — retry with exponential backoff
+​
+Messaging-specific error codes
+These codes appear in the errors[].code field and provide more specific detail than HTTP status codes alone:
+Code	Description	Resolution
+40001	Phone number not in E.164 format	Format as +[country code][number] with no spaces or punctuation
+40002	Missing required field	Include all required fields: from, to, and text (or media_urls)
+40300	Number not assigned to messaging profile	Go to My Numbers and assign a messaging profile
+40301	Sender registration required	Register for 10DLC, toll-free verification, or another sender type
+40302	Messaging profile disabled	Re-enable the profile in the portal
+42200	Invalid from number	Verify the number belongs to your account and supports messaging
+42201	Invalid to number	Verify the destination is a valid, active phone number
+42202	Message body too long	SMS max: 1,600 characters (concatenated). Reduce content or split into multiple messages
+42203	Invalid media URL	Ensure media_urls are publicly accessible HTTPS URLs
+42204	Too many media attachments	MMS supports up to 10 media URLs per message
+42205	Media file too large	Individual media files must be under 1 MB; total under 2 MB
+For a complete error code reference including delivery failure codes, see the Messaging Error Codes guide.
+​
+Rate limiting
+The Telnyx Messaging API enforces rate limits to ensure platform stability. When you exceed the limit, the API returns 429 Too Many Requests with a retry-after header.
+Rate limit headers:
+Header	Description
+x-ratelimit-limit	Maximum requests allowed in the current window
+x-ratelimit-remaining	Requests remaining in the current window
+x-ratelimit-reset	Unix timestamp when the window resets
+retry-after	Seconds to wait before retrying (only on 429 responses)
+Best practices for high-volume sending:
+Implement exponential backoff: wait 2^attempt seconds between retries (1s, 2s, 4s, 8s…)
+Add jitter to prevent thundering herd: wait = base_wait * (0.5 + random())
+Set a maximum retry count (3–5 attempts) to avoid infinite loops
+Use a message queue (Redis, RabbitMQ, SQS) to buffer outbound messages and control throughput
+Monitor x-ratelimit-remaining and slow down before hitting the limit
+​
+Troubleshooting checklist
+If your message fails to send, work through this checklist:
+1
+Verify API key
+
+Confirm your API key is active at API Keys. Revoked or expired keys return 401.
+2
+Check number assignment
+
+Verify your from number is assigned to a messaging profile at My Numbers. Unassigned numbers return 403.
+3
+Confirm E.164 format
+
+Both from and to must be in E.164 format: +15551234567. No spaces, dashes, or parentheses.
+4
+Check sender registration
+
+Sending to US carriers off-net requires registration. Check your registration status:
+10DLC: 10DLC Registration
+Toll-free: Toll-Free Verification
+Short code: Short Codes
+5
+Verify account balance
+
+Insufficient balance returns 402. Check and top up at Billing.
+6
+Check message content
+
+SMS body must not exceed 1,600 characters
+MMS media URLs must be publicly accessible HTTPS URLs
+Content must comply with carrier guidelines (no SHAFT content without proper registration)
+7
+Review webhook events
+
+If the API returns 200 but the message doesn’t arrive, check message.finalized webhook events for delivery failure details. See Webhooks and delivery tracking.
+Still stuck? Check the Telnyx Status Page for platform issues, or contact support with your message ID from the API response.
+​
+Webhooks and delivery tracking
+After sending a message, Telnyx delivers real-time status updates via webhooks. Configure a webhook URL on your Messaging Profile to receive these events automatically.
+​
+Message lifecycle events
+Messages progress through these statuses:
+Event	Status	Description
+message.sent	sent	Message accepted and sent to the carrier
+message.finalized	delivered	Carrier confirmed delivery to the handset
+message.finalized	delivery_failed	Carrier could not deliver the message
+message.finalized	delivery_unconfirmed	No delivery confirmation received from the carrier
+Not all carriers return delivery receipts. Some messages may remain in sent status without a finalized event. US carriers generally support delivery receipts for SMS; international coverage varies.
+​
+Webhook payload example
+{
+  "data": {
+    "event_type": "message.finalized",
+    "id": "e6e3e550-4e3f-4b3a-9e10-1c2d3e4f5a6b",
+    "occurred_at": "2026-03-05T18:30:00.000+00:00",
+    "payload": {
+      "id": "b0c7e8cb-6227-4c74-9f32-c7f80c30934b",
+      "record_type": "message",
+      "direction": "outbound",
+      "type": "SMS",
+      "from": { "phone_number": "+15551234567" },
+      "to": [
+        {
+          "phone_number": "+15559876543",
+          "status": "delivered"
+        }
+      ],
+      "text": "Hello, world!",
+      "parts": 1,
+      "cost": { "amount": "0.0051", "currency": "USD" },
+      "errors": [],
+      "completed_at": "2026-03-05T18:30:00.000+00:00"
+    },
+    "record_type": "event"
+  },
+  "meta": {
+    "attempt": 1,
+    "delivered_to": "https://example.com/webhooks"
+  }
+}
+​
+Processing webhooks
+Set up an endpoint to receive webhook POST requests and return a 200 response. Telnyx retries failed deliveries with exponential backoff.
+
+Node
+
+Python
+
+Ruby
+
+Go
+
+Java
+
+.NET
+
+PHP
+import express from 'express';
+
+const app = express();
+app.use(express.json());
+
+app.post('/webhooks/messaging', (req, res) => {
+  const event = req.body.data;
+
+  switch (event.event_type) {
+    case 'message.sent':
+      console.log(`Message ${event.payload.id} sent`);
+      break;
+    case 'message.finalized': {
+      const status = event.payload.to[0].status;
+      if (status === 'delivered') {
+        console.log(`Message ${event.payload.id} delivered`);
+      } else if (status === 'delivery_failed') {
+        console.error(`Message ${event.payload.id} failed:`, event.payload.errors);
+      }
+      break;
+    }
+  }
+
+  res.sendStatus(200);
+});
+
+app.listen(3000, () => console.log('Webhook server listening on port 3000'));
+​
+Retrieve message status via API
+You can also check a message’s current status by its ID:
+
+curl
+
+Node
+
+Python
+curl -X GET "https://api.telnyx.com/v2/messages/b0c7e8cb-6227-4c74-9f32-c7f80c30934b" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+​
+Delivery failure error codes
+When a message fails delivery, the errors array in the webhook payload contains error codes:
+Code	Description	Action
+30003	Unreachable destination	Verify the number is active and can receive SMS
+30004	Message blocked by carrier	Check content compliance and sender registration
+30005	Unknown destination	Number may be disconnected or invalid
+30006	Landline or unreachable	Number cannot receive SMS (landline, VoIP)
+30007	Carrier violation	Message rejected due to content filtering
+30008	Destination capacity exceeded	Retry after a delay
+For a complete error code reference, see the Messaging Error Codes guide.
+​
+Webhook security
+Validate incoming webhooks to ensure they’re from Telnyx:
+IP allowlisting — Telnyx sends webhooks from 192.76.120.192/27
+HTTPS endpoints — Always use HTTPS for your webhook URL
+Respond quickly — Return 200 within 5 seconds to prevent retries
+If your endpoint consistently fails to respond, Telnyx will retry with exponential backoff and eventually disable the webhook. Monitor your endpoint health to avoid missing delivery events.
+​
+Next steps
+Receive Messages
+Set up webhooks to receive incoming SMS
+Choose a Sender Type
+Learn about long codes, toll-free, and short codes
+10DLC Registration
+Register your brand for US messaging compliance
+API Reference
+Explore all messaging parameters

@@ -1,0 +1,304 @@
+Opt Outs
+Advanced Opt-In/Out Management
+
+Copy page
+
+Configure custom opt-in and opt-out keywords, auto-responses, AI opt-out detection, and country-specific messaging to maintain CTIA & TCPA compliance.
+
+Advanced Opt-In/Out lets you customize keyword triggers and auto-responses on your messaging profile. Configure country-specific responses, custom keywords, and track opt-out behavior via webhooks — all while maintaining CTIA & TCPA compliance.
+​
+Default behavior
+Without custom configuration, Telnyx handles standard opt-in/out keywords automatically:
+Opt-out keywords
+Opt-in keywords
+These keywords create a block rule preventing further messages to the recipient:
+Keyword	Action
+STOP	Block messages
+STOPALL	Block messages
+STOP ALL	Block messages
+UNSUBSCRIBE	Block messages
+CANCEL	Block messages
+END	Block messages
+QUIT	Block messages
+Block rules operate at the messaging profile level. If a user opts out from one number on your profile, they’re opted out from all numbers on that profile.
+When you attempt to message a blocked recipient, the API returns:
+{
+  "errors": [
+    {
+      "code": "40300",
+      "title": "Blocked due to STOP message",
+      "detail": "Messages cannot be sent from '{from}' to '{to}' due to an existing block rule."
+    }
+  ]
+}
+​
+Create custom auto-responses
+Configure custom keyword responses for opt-in, opt-out, and help messages:
+
+curl
+
+Python
+
+Node
+
+Ruby
+
+Go
+
+PHP
+# Create a custom opt-in auto-response
+curl -X POST \
+  https://api.telnyx.com/v2/messaging_profiles/{profile_id}/autoresp_configs \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "op": "start",
+    "keywords": ["JOIN", "SUBSCRIBE", "YES"],
+    "resp_text": "Welcome to Acme alerts! You'\''ll receive up to 4 msgs/month. Reply HELP for help, STOP to cancel. Msg&data rates may apply.",
+    "country_code": "US"
+  }'
+
+# Create a custom HELP response
+curl -X POST \
+  https://api.telnyx.com/v2/messaging_profiles/{profile_id}/autoresp_configs \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "op": "help",
+    "keywords": ["HELP", "INFO"],
+    "resp_text": "Acme Corp: For support call 1-800-555-0123 or email help@acme.com. Reply STOP to opt out. Msg&data rates may apply.",
+    "country_code": "US"
+  }'
+
+# Create a custom opt-out response
+curl -X POST \
+  https://api.telnyx.com/v2/messaging_profiles/{profile_id}/autoresp_configs \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "op": "stop",
+    "keywords": ["STOP", "QUIT", "CANCEL"],
+    "resp_text": "You have been unsubscribed from Acme alerts. Reply START to resubscribe.",
+    "country_code": "US"
+  }'
+​
+Operation types
+Operation (op)	Purpose	Default keywords
+start	Opt-in — removes block rule	START, UNSTOP
+stop	Opt-out — creates block rule	STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT
+help	Help — sends info response	HELP
+Custom	Any custom keyword response	(none)
+​
+Country-specific auto-responses
+Configure different responses per country using ISO 3166-1 alpha-2 codes. This enables localized language support:
+
+curl
+# English (US)
+curl -X POST \
+  https://api.telnyx.com/v2/messaging_profiles/{profile_id}/autoresp_configs \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "op": "stop",
+    "keywords": ["STOP"],
+    "resp_text": "You have been unsubscribed. Reply START to resubscribe.",
+    "country_code": "US"
+  }'
+
+# Spanish (Mexico)
+curl -X POST \
+  https://api.telnyx.com/v2/messaging_profiles/{profile_id}/autoresp_configs \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "op": "stop",
+    "keywords": ["PARAR", "DETENER"],
+    "resp_text": "Te has dado de baja. Responde INICIO para volver a suscribirte.",
+    "country_code": "MX"
+  }'
+
+# French (Canada)
+curl -X POST \
+  https://api.telnyx.com/v2/messaging_profiles/{profile_id}/autoresp_configs \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "op": "stop",
+    "keywords": ["ARRET", "ARRETER"],
+    "resp_text": "Vous êtes désabonné. Répondez DEBUT pour vous réabonner.",
+    "country_code": "CA"
+  }'
+
+# UK English
+curl -X POST \
+  https://api.telnyx.com/v2/messaging_profiles/{profile_id}/autoresp_configs \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "op": "start",
+    "keywords": ["START"],
+    "resp_text": "You are now subscribed to receive messages from Acme. Reply STOP to opt out.",
+    "country_code": "GB"
+  }'
+The feature is language agnostic — you can use keywords and responses in any language. The country_code field determines which auto-response applies based on the sender’s number origin.
+​
+AI opt-out detection
+Keyword matching catches STOP and UNSUBSCRIBE — but real users also say “please stop texting me”, “take me off this list”, or “I don’t want these anymore”. AI opt-out detection adds an AI classification layer that catches these natural-language opt-outs and handles them exactly like a keyword opt-out.
+Enable it per messaging profile:
+curl -X PATCH \
+  https://api.telnyx.com/v2/messaging_profiles/{profile_id} \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ***" \
+  -d '{
+    "features": {
+      "ai_opt_out_detection_enabled": true
+    }
+  }'
+​
+How it works
+The keyword check always runs first. A message matching your opt-out keywords (default or custom) is handled instantly by the keyword path — AI detection never touches it.
+Only non-keyword messages are classified. When no keyword matches, the message is sent to an AI classifier that returns an opt-out / not-opt-out verdict with a confidence score.
+Only high-confidence opt-out verdicts act. When the classifier detects opt-out intent with high confidence, Telnyx applies the same handling a literal STOP would get: the sender is blocked and your configured opt-out auto-response is sent (or the default, if you haven’t configured a custom one). Lower-confidence verdicts are ignored — the message delivers normally.
+Media-only and non-text messages skip classification. Messages without text can’t express an opt-out and are never classified.
+AI-detected opt-outs respect your custom STOP configuration. If your auto-response configuration suppresses blocking for the applicable country or profile scope, an AI-detected opt-out doesn’t block either. There’s no separate configuration surface — the feature layers on top of your existing opt-out rules.
+​
+What it costs
+AI opt-out detection is billed at $0.002 per classified message — only messages the AI classifier actually checks (i.e., inbound text messages on profiles with the feature enabled that match no opt-out keyword). There’s no charge for:
+Messages handled by keyword matching (your opt-out keywords are always free)
+Media-only or non-text messages
+Messages on profiles with the feature disabled
+Any message during a classifier outage (the feature fails open — messages deliver normally rather than being held for classification)
+​
+Disabling
+Set ai_opt_out_detection_enabled to false to disable detection — omitting the field from a PATCH leaves the current value unchanged. Existing block rules created by AI-detected opt-outs remain in effect until removed — disabling detection stops new classification, it doesn’t unblock anyone.
+​
+Track opt-out behavior via webhooks
+When a user sends an opt-in, opt-out, or help keyword, the inbound message webhook includes an autoresponse_type field:
+{
+  "data": {
+    "event_type": "message.received",
+    "payload": {
+      "autoresponse_type": "STOP",
+      "from": {
+        "phone_number": "+15559876543"
+      },
+      "text": "STOP",
+      "to": [
+        {
+          "phone_number": "+15551234567"
+        }
+      ]
+    }
+  }
+}
+​
+Handle opt-out webhooks
+
+Python
+
+Node
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+
+@app.route("/webhooks/messaging", methods=["POST"])
+def handle_webhook():
+    data = request.json["data"]
+
+    if data["event_type"] != "message.received":
+        return jsonify({"status": "ignored"}), 200
+
+    payload = data["payload"]
+    autoresponse_type = payload.get("autoresponse_type")
+    phone = payload["from"]["phone_number"]
+
+    if autoresponse_type == "STOP":
+        # User opted out — update your database
+        db.execute(
+            "UPDATE subscribers SET opted_out = TRUE, opted_out_at = NOW() "
+            "WHERE phone = %s",
+            (phone,),
+        )
+        print(f"User {phone} opted out")
+
+    elif autoresponse_type == "START":
+        # User opted back in
+        db.execute(
+            "UPDATE subscribers SET opted_out = FALSE "
+            "WHERE phone = %s",
+            (phone,),
+        )
+        print(f"User {phone} opted back in")
+
+    elif autoresponse_type == "HELP":
+        # User requested help — log for support
+        print(f"User {phone} requested help")
+
+    return jsonify({"status": "ok"}), 200
+The autoresponse_type field is also available in your SMS Logs via Detail Record Search reporting.
+​
+Limitations
+Reserved keywords
+
+Auto-response minimum length
+
+Maximum keywords per configuration
+
+Toll-free limitations
+
+AI detection confidence
+
+Block rule scope
+
+​
+Related resources
+Messaging Profiles
+Configure the messaging profile that manages your opt-in/out rules.
+Webhooks
+Set up webhooks to receive opt-in/out events.
+Short Codes
+Short code keyword handling and carrier certification.
+Toll-Free Verification
+Toll-free number verification and compliance.
+Was this page helpful?
+
+
+Yes
+
+No
+Hosted number order event
+Previous
+List opt-outs
+Next
+Ask a question...
+
+
+On this page
+Default behavior
+Create custom auto-responses
+Operation types
+Country-specific auto-responses
+AI opt-out detection
+How it works
+What it costs
+Disabling
+Track opt-out behavior via webhooks
+Handle opt-out webhooks
+Limitations
+Related resources
+github
+linkedin
+slack
+x
+Resources
+
+Pricing
+Compare Telnyx
+Support center
+SETI
+Agent platform configs
+About Telnyx
+Service status
+Updates
+

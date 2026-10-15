@@ -1,0 +1,389 @@
+Receive SMS and MMS Messages
+
+Copy page
+
+Receive inbound SMS and MMS messages via webhooks using the Telnyx Messaging API — with auto-reply, MMS media handling, and webhook signature verification.
+
+Receive inbound SMS and MMS messages via webhooks. When someone texts your Telnyx number, Telnyx sends an HTTP POST request with the message details to your configured webhook URL.
+​
+Prerequisites
+A Telnyx phone number assigned to a messaging profile
+A webhook URL configured on your messaging profile
+ngrok or similar tool for local development
+Already have a webhook server? Skip to Configure your webhook URL to point it at your messaging profile.
+​
+Quick Start
+1
+Create a webhook server
+Build a web server that accepts POST requests from Telnyx:
+
+Node
+
+Python
+
+Ruby
+
+Go
+
+Java
+
+.NET
+
+PHP
+import express from 'express';
+
+const app = express();
+app.use(express.json());
+
+app.post('/webhooks', (req, res) => {
+  const { data } = req.body;
+
+  if (data.event_type === 'message.received') {
+    const { payload } = data;
+    console.log(`From: ${payload.from.phone_number}`);
+    console.log(`Text: ${payload.text}`);
+    console.log(`Type: ${payload.type}`); // SMS or MMS
+
+    if (payload.media?.length > 0) {
+      console.log(`Media attachments: ${payload.media.length}`);
+      payload.media.forEach(m => console.log(`  ${m.content_type}: ${m.url}`));
+    }
+  }
+
+  res.sendStatus(200);
+});
+
+app.listen(5000, () => console.log('Webhook server running on port 5000'));
+2
+Expose your local server
+Use ngrok to create a public URL that forwards to your local server:
+ngrok http 5000
+Copy the forwarding URL (e.g., https://abc123.ngrok.io).
+3
+Configure your webhook URL
+Set the webhook URL on your messaging profile via the Portal or API:
+curl -X PATCH "https://api.telnyx.com/v2/messaging_profiles/YOUR_PROFILE_ID" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "webhook_url": "https://abc123.ngrok.io/webhooks"
+  }'
+Find your messaging profile ID in the Portal or via the List Messaging Profiles endpoint.
+4
+Test it
+Send a text message from your phone to your Telnyx number. You should see the message details logged in your server console.
+You can also test locally without a phone:
+curl -X POST http://localhost:5000/webhooks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": {
+      "event_type": "message.received",
+      "payload": {
+        "from": {"phone_number": "+15551234567"},
+        "to": [{"phone_number": "+15559876543"}],
+        "text": "Hello from test!",
+        "type": "SMS",
+        "media": []
+      }
+    }
+  }'
+Your webhook must return a 2xx response within 2 seconds (API v2) or 5 seconds (API v1). If delivery fails, Telnyx retries up to 2 times per URL. With a failover URL configured, that’s up to 4 total attempts.
+​
+Auto-Reply to Incoming Messages
+A common pattern is sending an automatic reply when a message arrives. Combine your webhook handler with the Send Message API:
+
+Node
+
+Python
+
+Ruby
+
+Go
+import express from 'express';
+import Telnyx from 'telnyx';
+
+const app = express();
+app.use(express.json());
+
+const client = new Telnyx({ apiKey: process.env.TELNYX_API_KEY });
+
+app.post('/webhooks', async (req, res) => {
+  const { data } = req.body;
+
+  if (data.event_type === 'message.received') {
+    const { payload } = data;
+    const from = payload.from.phone_number;
+    const to = payload.to[0].phone_number;
+
+    // Send auto-reply
+    await client.messages.send({
+      from: to,   // Reply from the number that received the message
+      to: from,   // Reply to the sender
+      text: `Thanks for your message! We received: "${payload.text}"`
+    });
+
+    console.log(`Auto-reply sent to ${from}`);
+  }
+
+  res.sendStatus(200);
+});
+
+app.listen(5000);
+Avoid reply loops. If both sides auto-reply, they’ll ping each other forever. Guard against this by checking the sender isn’t one of your own numbers, or by tracking recently replied conversations.
+​
+Webhook Payload Reference
+​
+Inbound SMS
+{
+  "data": {
+    "event_type": "message.received",
+    "id": "b301ed3f-1490-491f-995f-6e64e69674d4",
+    "occurred_at": "2024-01-15T20:16:07.588+00:00",
+    "payload": {
+      "direction": "inbound",
+      "encoding": "GSM-7",
+      "from": {
+        "carrier": "T-Mobile USA",
+        "line_type": "long_code",
+        "phone_number": "+13125550001",
+        "status": "webhook_delivered"
+      },
+      "id": "84cca175-9755-4859-b67f-4730d7f58aa3",
+      "media": [],
+      "messaging_profile_id": "740572b6-099c-44a1-89b9-6c92163bc68d",
+      "parts": 1,
+      "received_at": "2024-01-15T20:16:07.503+00:00",
+      "record_type": "message",
+      "text": "Hello from Telnyx!",
+      "to": [
+        {
+          "carrier": "Telnyx",
+          "line_type": "Wireless",
+          "phone_number": "+17735550002",
+          "status": "webhook_delivered"
+        }
+      ],
+      "type": "SMS"
+    },
+    "record_type": "event"
+  },
+  "meta": {
+    "attempt": 1,
+    "delivered_to": "https://example.com/webhooks"
+  }
+}
+​
+Inbound MMS
+MMS messages include a media array with downloadable attachments:
+{
+  "data": {
+    "event_type": "message.received",
+    "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "occurred_at": "2024-01-15T20:18:30.000+00:00",
+    "payload": {
+      "direction": "inbound",
+      "from": {
+        "carrier": "T-Mobile USA",
+        "line_type": "long_code",
+        "phone_number": "+13125550001"
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "media": [
+        {
+          "url": "https://media.telnyx.com/example-image.png",
+          "content_type": "image/png",
+          "sha256": "ab1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
+          "size": 102400
+        }
+      ],
+      "messaging_profile_id": "740572b6-099c-44a1-89b9-6c92163bc68d",
+      "parts": 1,
+      "received_at": "2024-01-15T20:18:30.000+00:00",
+      "record_type": "message",
+      "text": "Check out this photo!",
+      "to": [
+        {
+          "carrier": "Telnyx",
+          "line_type": "Wireless",
+          "phone_number": "+17735550002"
+        }
+      ],
+      "type": "MMS"
+    },
+    "record_type": "event"
+  }
+}
+MMS media URLs expire after 30 days. Download and store media files if you need long-term access.
+​
+Webhook Payload Schema
+Top-level fields
+Payload fields
+Media fields (MMS)
+Field	Type	Description
+data.event_type	string	Always message.received for inbound messages
+data.id	string	Unique event ID (UUID) — use for idempotency
+data.occurred_at	string	ISO 8601 timestamp when the event occurred
+data.record_type	string	Always event
+meta.attempt	integer	Webhook delivery attempt number (1–3)
+meta.delivered_to	string	The webhook URL this was delivered to
+​
+Downloading MMS Media
+Download media attachments from inbound MMS messages using the URLs in the media array. Authenticate with your API key:
+
+Node
+
+Python
+
+Go
+
+Ruby
+
+Java
+
+.NET
+
+PHP
+
+curl
+import fs from 'fs';
+
+async function downloadMedia(mediaUrl, apiKey) {
+  const response = await fetch(mediaUrl, {
+    headers: { 'Authorization': `Bearer ${apiKey}` }
+  });
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const filename = mediaUrl.split('/').pop();
+  fs.writeFileSync(filename, buffer);
+  console.log(`Downloaded: ${filename} (${buffer.length} bytes)`);
+}
+
+// In your webhook handler:
+for (const media of payload.media) {
+  await downloadMedia(media.url, process.env.TELNYX_API_KEY);
+}
+​
+Verifying Webhook Signatures
+In production, verify webhook signatures to confirm requests are from Telnyx. All webhooks are signed using ED25519 public key cryptography.
+Each webhook includes two headers:
+telnyx-signature-ed25519 — Base64-encoded signature
+telnyx-timestamp — Unix timestamp when the webhook was sent
+
+Node
+
+Python
+
+Ruby
+
+.NET
+
+PHP
+import Telnyx from 'telnyx';
+
+const telnyx = new Telnyx('YOUR_API_KEY');
+
+app.post('/webhooks', (req, res) => {
+  const signature = req.headers['telnyx-signature-ed25519'];
+  const timestamp = req.headers['telnyx-timestamp'];
+  const payload = JSON.stringify(req.body);
+
+  try {
+    const event = telnyx.webhooks.constructEvent(
+      payload,
+      signature,
+      timestamp,
+      process.env.TELNYX_PUBLIC_KEY
+    );
+    console.log('Verified event:', event.data.event_type);
+    res.sendStatus(200);
+  } catch (err) {
+    console.error('Signature verification failed:', err.message);
+    res.sendStatus(400);
+  }
+});
+Get your public key from the Mission Control Portal under Account Settings > Keys & Credentials > Public Key.
+For detailed webhook signature verification, see Webhook Fundamentals.
+​
+Handling Failed Webhooks
+When webhook delivery fails, Telnyx retries automatically. Build resilience into your architecture:
+
+Node
+
+Python
+import express from 'express';
+import { createClient } from 'redis';
+
+const app = express();
+app.use(express.json());
+
+const redis = createClient();
+await redis.connect();
+
+app.post('/webhooks', async (req, res) => {
+  // Respond immediately to avoid timeout
+  res.sendStatus(200);
+
+  const { data } = req.body;
+  const messageId = data.payload?.id;
+
+  // Deduplicate using Redis (TTL: 24 hours)
+  if (messageId) {
+    const exists = await redis.get(`msg:${messageId}`);
+    if (exists) return; // Already processed
+    await redis.set(`msg:${messageId}`, '1', { EX: 86400 });
+  }
+
+  // Process asynchronously
+  try {
+    await processMessage(data);
+  } catch (err) {
+    console.error(`Failed to process ${messageId}:`, err);
+    // Log to dead letter queue for manual review
+    await redis.lpush('webhook:failed', JSON.stringify({ data, error: err.message }));
+  }
+});
+For high-volume applications, use a message queue (Redis, SQS, RabbitMQ) between your webhook endpoint and processing logic. This ensures you always respond within the 2-second timeout.
+​
+Troubleshooting
+Webhooks not arriving
+
+Receiving duplicate webhooks
+
+Webhook timeout errors
+
+Missing media in MMS
+
+​
+Webhook URL Hierarchy
+Telnyx checks for webhook URLs in this order:
+Request body — URLs provided when sending a message (outbound delivery receipts only)
+Messaging profile — URLs configured on the profile
+No URL — Webhook delivery is skipped
+Configure a failover URL on your messaging profile for redundancy. If the primary URL fails all retry attempts, Telnyx sends to the failover URL.
+​
+Related Webhook Events
+Your webhook URL receives more than just message.received. For delivery status tracking and other events, see Receiving Webhooks.
+Event	Description
+message.received	Inbound SMS or MMS received (this guide)
+message.sent	Outbound message accepted by carrier
+message.finalized	Final delivery status (delivered, failed, etc.)
+​
+Next Steps
+Send Messages
+Send outbound SMS and MMS messages
+Webhooks Reference
+All webhook event types and payload details
+Message Encoding
+Understand GSM-7, UCS-2, and message segmentation
+Auto-Reply with Opt-Out
+Handle STOP/HELP keywords automatically
+Was this page helpful?
+
+
+Yes
+
+No
+Send Your First Message
+Previous
+Receiving Webhooks for Messaging
+Next
